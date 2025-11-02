@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <unistd.h>   
 #include <pthread.h> 
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "multicast.h"
 #include "zcs.h"
@@ -49,31 +51,17 @@ int decode(char *msg);
 void encode(char *result);
 
 
-int zcs_init(int type, int lan){
+int zcs_init(int type){
 
     pthread_mutex_lock(&mutex); // lock writing to global variables
     // setup receiver, listening on port 5000
-    // if we are using lan A
-    if(lan == 0 ){
-        receiver = multicast_init("224.1.10.1", 5555, 7777);
-        multicast_setup_recv(receiver);
-        
-        //setup sender, sending to port 5000
-        sender = multicast_init("224.1.10.1", 7777, 5555);
+    receiver = multicast_init("224.1.1.1", 3000, 5000);
+    multicast_setup_recv(receiver);
 
-        zcsType = type;
-        pthread_mutex_unlock(&mutex);
-    }
-    // if we are using lan B, if invalid use lanB.
-    else {
-        receiver = multicast_init("224.1.20.2", 6666, 8888);
-        multicast_setup_recv(receiver);
-        
-        //setup sender, sending to port 5000
-        sender = multicast_init("224.1.20.2", 8888, 6666);
-        zcsType = type;
-        pthread_mutex_unlock(&mutex);
-    }
+    //setup sender, sending to port 5000
+    sender = multicast_init("224.1.1.1", 5000, 3000);
+    zcsType = type;
+    pthread_mutex_unlock(&mutex);
 
     if (receiver == NULL || sender == NULL){
         return -1;
@@ -89,15 +77,23 @@ int zcs_init(int type, int lan){
     // if node is an APP type, send DISCOVERY message
     if (type == ZCS_APP_TYPE){
         char msg[] = "DISCOVERY";
+
+        printf("Sending DISCOVERY\n");
         pthread_mutex_lock(&mutex);
         multicast_send(sender, msg, strlen(msg));
         pthread_mutex_unlock(&mutex);
+        // wait 2 seconds for node to receive NOTIFICATION responses
+        sleep(2);
+
     }
 
     pthread_mutex_lock(&mutex); // lock writing to global variables
     zcs_init_isDone = 1;
     pthread_mutex_unlock(&mutex);
 
+    if (zcsType == ZCS_APP_TYPE){
+        printf("APP INIT is done\n");
+    }
     return 0;
 }
  
@@ -155,7 +151,6 @@ int zcs_post_ad(char *ad_name, char *ad_value){
         }
         // sending msg
         multicast_send(sender, msg, strlen(msg));
-
         pthread_mutex_unlock(&mutex);
     }
     
@@ -324,53 +319,47 @@ void encode(char *result){
 }
 
 int decode(char *msg){
-    char copyMessage[sizeof(msg)];
-    char *token;
-
-    strcpy(copyMessage, msg);
-    token = strtok(msg, "#");
-
+    char *token = strtok(msg, "#");
     // check what type of notification it is
     if (strcmp(token, "NOTIFICATION") == 0 && zcsType == ZCS_APP_TYPE){
-        
-        token = strtok(copyMessage, "#;");
-
-        char nodeName[400];     
-        int num_attributes;
-
+        char name[64];
+        int numAttr;
         // store node name
-        token = strtok(NULL, "#;");
-        
-        strcpy(nodeName, token);
+        token = strtok(NULL, "#");
+        strcpy(name, token);
         
         // store numAttr
-        token = strtok(NULL, "#;");
-        num_attributes = atoi(token);
+        token = strtok(NULL, "#");
+        numAttr = atoi(token);
 
         // store attributes
-        zcs_attribute_t *attr;
-
-        attr = malloc(num_attributes * sizeof(zcs_attribute_t));
+        zcs_attribute_t attr[numAttr];
         
-        for (int i = 0; i < num_attributes; i++){
-            token = strtok(NULL, "#;");
-            attr[i].attr_name = strdup(token);
+        for (int i = 0; i < numAttr; i++){
+            token = strtok(NULL, "#");
 
-            token = strtok(NULL, "#;");
-            attr[i].value = strdup(token);
+            char attribute[128];
+            strcpy(attribute, token);
+
+            char *key = strtok(attribute, ";");
+            char *value = strtok(NULL, ";");
+            
+            strcpy(attr[i].attr_name, key);
+            strcpy(attr[i].value, value);
+
         }
         
 
-        if (nodeName == NULL || attr == NULL){
+        if (name == NULL || attr == NULL){
             return -1;
         }
 
-        printf("APP received NOTIFICATION message from node: [%s]\n", nodeName);
+        printf("APP received NOTIFICATION message from node: [%s]\n", name);
 
         // check if service is not in registry, else don't add
         pthread_mutex_lock(&mutex);
-        if (getEntry(nodeName) == NULL){
-            push(nodeName, attr, num_attributes);
+        if (getEntry(name) == NULL){
+            push(name, attr, numAttr);
         }
         pthread_mutex_unlock(&mutex);
     }

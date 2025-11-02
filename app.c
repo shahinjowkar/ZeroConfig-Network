@@ -1,6 +1,5 @@
 #include <unistd.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "zcs.h"
 
@@ -9,13 +8,9 @@ void hello(char *s, char *r) {
     zcs_log();
 }
 
-int main(int argc, char* argv[]) {
-    if(argc < 2) {
-        return -1;
-    }
-    int lan_type = atoi(argv[1]);
+int main() {
     int rv;
-    rv = zcs_init(ZCS_APP_TYPE,lan_type);
+    rv = zcs_init(ZCS_APP_TYPE);
     sleep(10);
     char *names[10];
     rv = zcs_query("type", "speaker", names, 10);
