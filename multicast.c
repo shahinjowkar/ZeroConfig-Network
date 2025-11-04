@@ -14,12 +14,15 @@ mcast_t *multicast_init(char *mcast_addr, int sport, int rport)
     if (m->sock < 0)
     {
         perror("socket");
-        exit(1);
+        free(m);
+        return NULL;
     }
     int optval = 1;
+    //making multiple ports/address reusable
     setsockopt(m->sock, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
     setsockopt(m->sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 
+    
     bzero((char *)&(m->addr), sizeof(m->addr));
     m->addr.sin_family = AF_INET;
     m->addr.sin_addr.s_addr = inet_addr(mcast_addr);
@@ -69,7 +72,7 @@ void multicast_setup_recv(mcast_t *m)
 
 int multicast_receive(mcast_t *m, void *buf, int bufsize)
 {
-    int cnt = recvfrom(m->sock, buf, bufsize, 0, (struct sockaddr *)&(m->my_addr), &(m->my_addrlen));
+    int cnt = recvfrom(m->sock, buf, bufsize, 0, (struct sockaddr *)&(m->my_addr), &(m->my_addrlen));//you pass the address in so OS write to it about the sende
     if (cnt < 0)
     {
         perror("recvfrom");
