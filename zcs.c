@@ -44,7 +44,7 @@ void deleteEntry(char *name);
 // void sendNotification(char *name, zcs_attribute_t attr[], int numAttr);
 void sendNotification();
 
-// void *receive(void *args);
+void *receive(void *args);
 void *sendHeartbeat(void *args);
 
 int decode(char *msg);
@@ -65,14 +65,11 @@ int zcs_init(int type){
     if (m_socket == NULL){
         return -1;
     }
-
-    // creating message receiving thread
-    int rc = pthread_create(&listening_id, NULL, receive, NULL);
+    int rc = pthread_create(&listening_id, NULL, receive, NULL); //pthread for listening
     if (rc){
          printf("Error:unable to create listening thread, %d", rc);
          return -1;
     }
-
     // if node is an APP type, send DISCOVERY message
     if (type == ZCS_APP_TYPE){
         char msg[] = "DISCOVERY";
@@ -81,17 +78,14 @@ int zcs_init(int type){
         sleep(2);
 
     }
-
     zcs_init_isDone = 1;
-
     if (zcsType == ZCS_APP_TYPE){
         printf("APP INIT is done\n");
     }
-    pthread_join(listening_id, NULL);
     return 0;
 }
 
-void *receive(){
+void *testInit(){
     char buff[64];
     int packet_count = 0;
 
@@ -111,41 +105,62 @@ void *receive(){
     }
     return NULL;
 }
+// thread routine functions
+void *receive(void *args){
+    char buff[500];
+    while (1) {
+	    while (multicast_check_receive(m_socket) == 0) {
+            if (shutdownFlag){
+                break;
+            }
+
+	        printf("Listening for messages: repeat..checking.. \n");
+	    }
+        if (shutdownFlag){
+            break;
+        }
+	    multicast_receive(m_socket, buff, sizeof(buff));
+        printf("msg: %s\n",buff);
+        // decode(buff);
+        // clear buffer
+        // memset(buffer,0,sizeof(buffer));
+    }
+}
 
  
-// int zcs_start(char *name, zcs_attribute_t attr[], int num){
+int zcs_start(char *name, zcs_attribute_t attr[], int num){
      
-//     if (zcs_init_isDone == 0){
-//         return -1;
-//     }
+    if (zcs_init_isDone == 0){
+        return -1;
+    }
     
-//     pthread_mutex_lock(&mutex); // lock writing to global variables
-//     zcsNumAttr = num;
-//     // if current node is SERVICE type, allocate node info to global vars
-//     // and send NOTIFICATION msg
+    pthread_mutex_lock(&mutex); // lock writing to global variables
+    zcsNumAttr = num;
+    // if current node is SERVICE type, allocate node info to global vars
+    // and send NOTIFICATION msg
     
-//     strcpy(zcsName, name);
-//     attributes = malloc(num * sizeof(zcs_attribute_t));
+    strcpy(zcsName, name);
+    attributes = malloc(num * sizeof(zcs_attribute_t));
     
-//     for (int i = 0; i < num; i++) {
-//         attributes[i] = attr[i];
-//     }
-//     pthread_mutex_unlock(&mutex);
+    for (int i = 0; i < num; i++) {
+        attributes[i] = attr[i];
+    }
+    pthread_mutex_unlock(&mutex);
 
-//     if (zcsName == NULL || attributes == NULL){
-//         return -1;
-//     }
-//     // send NOTIFICATION msg
-//     sendNotification();
-//     // create HEARTBEAT thread for current service node
-//     int rc = pthread_create(&heartbeat_id, NULL, sendHeartbeat, NULL);
-//     if (rc){
-//         printf("Error:unable to create HEARTBEAT thread, %d", rc);
-//         return -1;
-//     }
+    if (zcsName == NULL || attributes == NULL){
+        return -1;
+    }
+    // send NOTIFICATION msg
+    sendNotification();
+    // create HEARTBEAT thread for current service node
+    int rc = pthread_create(&heartbeat_id, NULL, sendHeartbeat, NULL);
+    if (rc){
+        printf("Error:unable to create HEARTBEAT thread, %d", rc);
+        return -1;
+    }
     
-//     return 0;
-// }
+    return 0;
+}
 
 // int zcs_post_ad(char *ad_name, char *ad_value){
 

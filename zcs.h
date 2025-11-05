@@ -46,6 +46,7 @@ int zcs_init(int type);
 // int zcs_shutdown();
 // void zcs_log();
 void *receive();
+void *testInit();
 
 #endif
 
